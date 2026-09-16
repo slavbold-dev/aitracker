@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -34,14 +35,30 @@ fun CalendarScreen(
 ) {
     val selectedDate by viewModel.selectedDate.collectAsState()
     val tasks by viewModel.tasksForSelectedDate.collectAsState(initial = emptyList())
+    val allTasks by viewModel.allTasks.collectAsState(initial = emptyList())
     
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var selectedTaskForEdit by remember { mutableStateOf<Task?>(null) }
+    var showCalendarDialog by remember { mutableStateOf(false) }
     
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("AI Task Tracker") },
+                title = { 
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("AI Task Tracker")
+                        IconButton(onClick = { showCalendarDialog = true }) {
+                            Icon(
+                                Icons.Default.CalendarToday,
+                                contentDescription = "Календарь",
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
@@ -132,6 +149,19 @@ fun CalendarScreen(
             }
         )
     }
+    
+    // Calendar Dialog
+    if (showCalendarDialog) {
+        CalendarDialog(
+            allTasks = allTasks,
+            selectedDate = selectedDate,
+            onDismiss = { showCalendarDialog = false },
+            onDateSelected = { selectedMillis ->
+                viewModel.setSelectedDate(selectedMillis)
+                showCalendarDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -143,6 +173,12 @@ fun DateSelector(
 ) {
     val dateFormat = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale.getDefault())
     val shortDateFormat = SimpleDateFormat("dd MMM", Locale.getDefault())
+    val today = Calendar.getInstance().apply { timeInMillis = System.currentTimeMillis() }
+    val isToday = Calendar.getInstance().apply { timeInMillis = selectedDate }.let { cal ->
+        cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
+        cal.get(Calendar.MONTH) == today.get(Calendar.MONTH) &&
+        cal.get(Calendar.DAY_OF_MONTH) == today.get(Calendar.DAY_OF_MONTH)
+    }
     
     Card(
         modifier = Modifier
@@ -171,8 +207,10 @@ fun DateSelector(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    TextButton(onClick = onGoToToday) {
-                        Text("Сегодня", style = MaterialTheme.typography.bodySmall)
+                    if (!isToday) {
+                        TextButton(onClick = onGoToToday) {
+                            Text("Показать сегодня", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
                 
@@ -486,6 +524,171 @@ fun TimePickerDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Отмена")
+            }
+        }
+    )
+}
+
+@Composable
+fun CalendarDialog(
+    allTasks: List<Task>,
+    selectedDate: Long,
+    onDismiss: () -> Unit,
+    onDateSelected: (Long) -> Unit
+) {
+    val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
+    var currentMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH)) }
+    var currentYear by remember { mutableIntStateOf(calendar.get(Calendar.YEAR)) }
+    
+    // Group tasks by date
+    val tasksByDate = remember(allTasks) {
+        allTasks.groupBy { it.date }
+    }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, currentYear)
+                        set(Calendar.MONTH, currentMonth)
+                        add(Calendar.MONTH, -1)
+                        currentMonth = get(Calendar.MONTH)
+                        currentYear = get(Calendar.YEAR)
+                    }
+                }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий месяц")
+                }
+                Text(
+                    text = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                        .format(Calendar.getInstance().apply {
+                            set(Calendar.YEAR, currentYear)
+                            set(Calendar.MONTH, currentMonth)
+                        }.timeInMillis),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, currentYear)
+                        set(Calendar.MONTH, currentMonth)
+                        add(Calendar.MONTH, 1)
+                        currentMonth = get(Calendar.MONTH)
+                        currentYear = get(Calendar.YEAR)
+                    }
+                }) {
+                    Icon(Icons.Default.ArrowForward, contentDescription = "Следующий месяц")
+                }
+            }
+        },
+        text = {
+            Column {
+                // Days of week header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    val daysOfWeek = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+                    daysOfWeek.forEach { day ->
+                        Text(
+                            text = day,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(40.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Calendar grid
+                val daysInMonth = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, currentYear)
+                    set(Calendar.MONTH, currentMonth)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }.getActualMaximum(Calendar.DAY_OF_MONTH)
+                
+                val firstDayOfWeek = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, currentYear)
+                    set(Calendar.MONTH, currentMonth)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }.get(Calendar.DAY_OF_WEEK).let { 
+                    if (it == Calendar.SUNDAY) 7 else it - 1 
+                }
+                
+                var dayCounter = 1
+                for (week in 0..5) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        for (dayOfWeek in 0..6) {
+                            if (week == 0 && dayOfWeek < firstDayOfWeek) {
+                                Spacer(modifier = Modifier.width(40.dp))
+                            } else if (dayCounter > daysInMonth) {
+                                break
+                            } else {
+                                val currentDayMillis = Calendar.getInstance().apply {
+                                    set(Calendar.YEAR, currentYear)
+                                    set(Calendar.MONTH, currentMonth)
+                                    set(Calendar.DAY_OF_MONTH, dayCounter)
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }.timeInMillis
+                                
+                                val hasTasks = tasksByDate.containsKey(currentDayMillis)
+                                val isSelected = currentDayMillis == selectedDate
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .width(40.dp)
+                                        .height(40.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primary
+                                            else Color.Transparent
+                                        )
+                                        .clickable { onDateSelected(currentDayMillis) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = dayCounter.toString(),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                            else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (hasTasks) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .background(Color.Green)
+                                            )
+                                        }
+                                    }
+                                }
+                                dayCounter++
+                            }
+                        }
+                    }
+                    if (dayCounter > daysInMonth) break
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Закрыть")
             }
         }
     )

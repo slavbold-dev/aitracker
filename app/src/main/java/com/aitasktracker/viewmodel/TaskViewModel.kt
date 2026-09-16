@@ -15,6 +15,8 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedDate = MutableStateFlow(getStartOfDay(Calendar.getInstance()))
     val selectedDate: StateFlow<Long> = _selectedDate.asStateFlow()
     
+    val allTasks: Flow<List<Task>> = taskDao.getAllTasks()
+    
     val tasksForSelectedDate: Flow<List<Task>> = _selectedDate.flatMapLatest { date ->
         taskDao.getTasksForDate(date)
     }
