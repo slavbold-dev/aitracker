@@ -371,44 +371,97 @@ fun TimePickerDialog(
     val calendar = Calendar.getInstance().apply { timeInMillis = currentTime }
     var hour by remember { mutableIntStateOf(calendar.get(Calendar.HOUR_OF_DAY)) }
     var minute by remember { mutableIntStateOf(calendar.get(Calendar.MINUTE)) }
+    var showHourDropdown by remember { mutableStateOf(false) }
+    var showMinuteDropdown by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Выберите время") },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Simple hour/minute selectors
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Hour selector
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(onClick = { hour = (hour + 1) % 24 }) {
-                            Icon(Icons.Default.ArrowForward, contentDescription = "Час+")
+                    // Hour selector with dropdown
+                    Box {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(onClick = { showHourDropdown = true }) {
+                                Icon(Icons.Default.ArrowForward, contentDescription = "Выбрать час")
+                            }
+                            Text(
+                                text = String.format("%02d", hour),
+                                style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier.clickable { showHourDropdown = true }
+                            )
+                            IconButton(onClick = { hour = (hour - 1 + 24) % 24 }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Час-")
+                            }
                         }
-                        Text(
-                            text = String.format("%02d", hour),
-                            style = MaterialTheme.typography.headlineMedium
-                        )
-                        IconButton(onClick = { hour = (hour - 1 + 24) % 24 }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Час-")
+                        
+                        // Hour dropdown menu
+                        if (showHourDropdown) {
+                            Card(
+                                modifier = Modifier
+                                    .width(100.dp)
+                                    .height(200.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                LazyColumn {
+                                    items(24) { h ->
+                                        ListItem(
+                                            headlineContent = { Text(String.format("%02d", h)) },
+                                            modifier = Modifier
+                                                .clickable {
+                                                    hour = h
+                                                    showHourDropdown = false
+                                                }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     
                     Text(":", style = MaterialTheme.typography.headlineMedium)
                     
-                    // Minute selector
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(onClick = { minute = (minute + 1) % 60 }) {
-                            Icon(Icons.Default.ArrowForward, contentDescription = "Минута+")
+                    // Minute selector with dropdown
+                    Box {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(onClick = { showMinuteDropdown = true }) {
+                                Icon(Icons.Default.ArrowForward, contentDescription = "Выбрать минуты")
+                            }
+                            Text(
+                                text = String.format("%02d", minute),
+                                style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier.clickable { showMinuteDropdown = true }
+                            )
+                            IconButton(onClick = { minute = (minute - 1 + 60) % 60 }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Минута-")
+                            }
                         }
-                        Text(
-                            text = String.format("%02d", minute),
-                            style = MaterialTheme.typography.headlineMedium
-                        )
-                        IconButton(onClick = { minute = (minute - 1 + 60) % 60 }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Минута-")
+                        
+                        // Minute dropdown menu
+                        if (showMinuteDropdown) {
+                            Card(
+                                modifier = Modifier
+                                    .width(100.dp)
+                                    .height(200.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                LazyColumn {
+                                    items(60) { m ->
+                                        ListItem(
+                                            headlineContent = { Text(String.format("%02d", m)) },
+                                            modifier = Modifier
+                                                .clickable {
+                                                    minute = m
+                                                    showMinuteDropdown = false
+                                                }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -424,6 +477,7 @@ fun TimePickerDialog(
                         set(Calendar.MILLISECOND, 0)
                     }
                     onConfirm(selectedCalendar.timeInMillis)
+                    onDismiss()
                 }
             ) {
                 Text("OK")
