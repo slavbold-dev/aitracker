@@ -1,5 +1,11 @@
 package com.aitasktracker.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -39,18 +45,20 @@ fun CalendarScreen(
     
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var selectedTaskForEdit by remember { mutableStateOf<Task?>(null) }
-    var showCalendarDialog by remember { mutableStateOf(false) }
+    var showCalendarView by remember { mutableStateOf(false) }
+    var slideDirection by remember { mutableStateOf(SlideDirection.Right) }
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("AI Task Tracker")
-                        IconButton(onClick = { showCalendarDialog = true }) {
+                        IconButton(onClick = { showCalendarView = true }) {
                             Icon(
                                 Icons.Default.CalendarToday,
                                 contentDescription = "Календарь",
@@ -66,62 +74,103 @@ fun CalendarScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddTaskDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Добавить задачу")
+            if (!showCalendarView) {
+                FloatingActionButton(
+                    onClick = { showAddTaskDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Добавить задачу")
+                }
             }
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // Date selector
-            DateSelector(
-                selectedDate = selectedDate,
-                onPreviousDay = {
-                    val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
-                    calendar.add(Calendar.DAY_OF_YEAR, -1)
-                    viewModel.setSelectedDate(calendar.timeInMillis)
-                },
-                onNextDay = {
-                    val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
-                    calendar.add(Calendar.DAY_OF_YEAR, 1)
-                    viewModel.setSelectedDate(calendar.timeInMillis)
-                },
-                onGoToToday = {
-                    viewModel.setSelectedDate(System.currentTimeMillis())
+        AnimatedContent(
+            targetState = showCalendarView,
+            transitionSpec = {
+                if (targetState) {
+                    fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                } else {
+                    fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
                 }
-            )
-            
-            // Task list
-            if (tasks.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Нет задач на этот день",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
+            },
+            label = "calendarViewToggle"
+        ) { isCalendarVisible ->
+            if (isCalendarVisible) {
+                CalendarView(
+                    allTasks = allTasks,
+                    selectedDate = selectedDate,
+                    onDateSelected = { selectedMillis ->
+                        slideDirection = if (selectedMillis > selectedDate) SlideDirection.Left else SlideDirection.Right
+                        viewModel.setSelectedDate(selectedMillis)
+                        showCalendarView = false
+                    },
+                    onClose = { showCalendarView = false }
+                )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
                 ) {
-                    items(tasks, key = { it.id }) { task ->
-                        TaskItem(
-                            task = task,
-                            onToggleComplete = { viewModel.toggleTaskCompletion(task.id, !task.isCompleted) },
-                            onDelete = { viewModel.deleteTask(task) },
-                            onEdit = { selectedTaskForEdit = task }
+                    // Date selector
+                    AnimatedContent(
+                        targetState = selectedDate,
+                        transitionSpec = {
+                            slideInHorizontally(
+                                initialOffsetX = { if (slideDirection == SlideDirection.Left) it else -it },
+                                animationSpec = androidx.compose.animation.core.tween(300)
+                            ) togetherWith slideOutHorizontally(
+                                targetOffsetX = { if (slideDirection == SlideDirection.Left) -it else it },
+                                animationSpec = androidx.compose.animation.core.tween(300)
+                            )
+                        },
+                        label = "dateChange"
+                    ) { currentDate ->
+                        DateSelector(
+                            selectedDate = currentDate,
+                            onPreviousDay = {
+                                val calendar = Calendar.getInstance().apply { timeInMillis = currentDate }
+                                calendar.add(Calendar.DAY_OF_YEAR, -1)
+                                viewModel.setSelectedDate(calendar.timeInMillis)
+                            },
+                            onNextDay = {
+                                val calendar = Calendar.getInstance().apply { timeInMillis = currentDate }
+                                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                                viewModel.setSelectedDate(calendar.timeInMillis)
+                            },
+                            onGoToToday = {
+                                viewModel.setSelectedDate(System.currentTimeMillis())
+                            }
                         )
+                    }
+                    
+                    // Task list
+                    if (tasks.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Нет задач на этот день",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(tasks, key = { it.id }) { task ->
+                                TaskItem(
+                                    task = task,
+                                    onToggleComplete = { viewModel.toggleTaskCompletion(task.id, !task.isCompleted) },
+                                    onDelete = { viewModel.deleteTask(task) },
+                                    onEdit = { selectedTaskForEdit = task }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -149,20 +198,9 @@ fun CalendarScreen(
             }
         )
     }
-    
-    // Calendar Dialog
-    if (showCalendarDialog) {
-        CalendarDialog(
-            allTasks = allTasks,
-            selectedDate = selectedDate,
-            onDismiss = { showCalendarDialog = false },
-            onDateSelected = { selectedMillis ->
-                viewModel.setSelectedDate(selectedMillis)
-                showCalendarDialog = false
-            }
-        )
-    }
 }
+
+enum class SlideDirection { Left, Right }
 
 @Composable
 fun DateSelector(
@@ -530,11 +568,11 @@ fun TimePickerDialog(
 }
 
 @Composable
-fun CalendarDialog(
+fun CalendarView(
     allTasks: List<Task>,
     selectedDate: Long,
-    onDismiss: () -> Unit,
-    onDateSelected: (Long) -> Unit
+    onDateSelected: (Long) -> Unit,
+    onClose: () -> Unit
 ) {
     val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
     var currentMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH)) }
@@ -545,151 +583,157 @@ fun CalendarDialog(
         allTasks.groupBy { it.date }
     }
     
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = {
-                    val cal = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, currentYear)
-                        set(Calendar.MONTH, currentMonth)
-                        add(Calendar.MONTH, -1)
-                        currentMonth = get(Calendar.MONTH)
-                        currentYear = get(Calendar.YEAR)
-                    }
-                }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий месяц")
-                }
-                Text(
-                    text = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-                        .format(Calendar.getInstance().apply {
-                            set(Calendar.YEAR, currentYear)
-                            set(Calendar.MONTH, currentMonth)
-                        }.timeInMillis),
-                    style = MaterialTheme.typography.titleLarge
-                )
-                IconButton(onClick = {
-                    val cal = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, currentYear)
-                        set(Calendar.MONTH, currentMonth)
-                        add(Calendar.MONTH, 1)
-                        currentMonth = get(Calendar.MONTH)
-                        currentYear = get(Calendar.YEAR)
-                    }
-                }) {
-                    Icon(Icons.Default.ArrowForward, contentDescription = "Следующий месяц")
-                }
-            }
-        },
-        text = {
-            Column {
-                // Days of week header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    val daysOfWeek = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-                    daysOfWeek.forEach { day ->
-                        Text(
-                            text = day,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(40.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Calendar grid
-                val daysInMonth = Calendar.getInstance().apply {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // Header with month navigation and close button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = {
+                val cal = Calendar.getInstance().apply {
                     set(Calendar.YEAR, currentYear)
                     set(Calendar.MONTH, currentMonth)
-                    set(Calendar.DAY_OF_MONTH, 1)
-                }.getActualMaximum(Calendar.DAY_OF_MONTH)
-                
-                val firstDayOfWeek = Calendar.getInstance().apply {
+                    add(Calendar.MONTH, -1)
+                    currentMonth = get(Calendar.MONTH)
+                    currentYear = get(Calendar.YEAR)
+                }
+            }) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий месяц")
+            }
+            Text(
+                text = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                    .format(Calendar.getInstance().apply {
+                        set(Calendar.YEAR, currentYear)
+                        set(Calendar.MONTH, currentMonth)
+                    }.timeInMillis),
+                style = MaterialTheme.typography.titleLarge
+            )
+            IconButton(onClick = {
+                val cal = Calendar.getInstance().apply {
                     set(Calendar.YEAR, currentYear)
                     set(Calendar.MONTH, currentMonth)
-                    set(Calendar.DAY_OF_MONTH, 1)
-                }.get(Calendar.DAY_OF_WEEK).let { 
-                    if (it == Calendar.SUNDAY) 7 else it - 1 
+                    add(Calendar.MONTH, 1)
+                    currentMonth = get(Calendar.MONTH)
+                    currentYear = get(Calendar.YEAR)
                 }
-                
-                var dayCounter = 1
-                for (week in 0..5) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        for (dayOfWeek in 0..6) {
-                            if (week == 0 && dayOfWeek < firstDayOfWeek) {
-                                Spacer(modifier = Modifier.width(40.dp))
-                            } else if (dayCounter > daysInMonth) {
-                                break
-                            } else {
-                                val currentDayMillis = Calendar.getInstance().apply {
-                                    set(Calendar.YEAR, currentYear)
-                                    set(Calendar.MONTH, currentMonth)
-                                    set(Calendar.DAY_OF_MONTH, dayCounter)
-                                    set(Calendar.HOUR_OF_DAY, 0)
-                                    set(Calendar.MINUTE, 0)
-                                    set(Calendar.SECOND, 0)
-                                    set(Calendar.MILLISECOND, 0)
-                                }.timeInMillis
-                                
-                                val hasTasks = tasksByDate.containsKey(currentDayMillis)
-                                val isSelected = currentDayMillis == selectedDate
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .width(40.dp)
-                                        .height(40.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                            if (isSelected) MaterialTheme.colorScheme.primary
-                                            else Color.Transparent
-                                        )
-                                        .clickable { onDateSelected(currentDayMillis) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            text = dayCounter.toString(),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                            else MaterialTheme.colorScheme.onSurface
-                                        )
-                                        if (hasTasks) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(6.dp)
-                                                    .clip(RoundedCornerShape(3.dp))
-                                                    .background(Color.Green)
-                                            )
-                                        }
-                                    }
-                                }
-                                dayCounter++
-                            }
-                        }
-                    }
-                    if (dayCounter > daysInMonth) break
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) {
-                Text("Закрыть")
+            }) {
+                Icon(Icons.Default.ArrowForward, contentDescription = "Следующий месяц")
             }
         }
-    )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Days of week header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            val daysOfWeek = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+            daysOfWeek.forEach { day ->
+                Text(
+                    text = day,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(40.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Calendar grid
+        val daysInMonth = Calendar.getInstance().apply {
+            set(Calendar.YEAR, currentYear)
+            set(Calendar.MONTH, currentMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }.getActualMaximum(Calendar.DAY_OF_MONTH)
+        
+        val firstDayOfWeek = Calendar.getInstance().apply {
+            set(Calendar.YEAR, currentYear)
+            set(Calendar.MONTH, currentMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }.get(Calendar.DAY_OF_WEEK).let { 
+            if (it == Calendar.SUNDAY) 7 else it - 1 
+        }
+        
+        var dayCounter = 1
+        for (week in 0..5) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                for (dayOfWeek in 0..6) {
+                    if (week == 0 && dayOfWeek < firstDayOfWeek) {
+                        Spacer(modifier = Modifier.width(40.dp))
+                    } else if (dayCounter > daysInMonth) {
+                        break
+                    } else {
+                        val currentDayMillis = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, currentYear)
+                            set(Calendar.MONTH, currentMonth)
+                            set(Calendar.DAY_OF_MONTH, dayCounter)
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+                        
+                        val hasTasks = tasksByDate.containsKey(currentDayMillis)
+                        val isSelected = currentDayMillis == selectedDate
+                        
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else Color.Transparent
+                                )
+                                .clickable { onDateSelected(currentDayMillis) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = dayCounter.toString(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (hasTasks) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(Color.Green)
+                                    )
+                                }
+                            }
+                        }
+                        dayCounter++
+                    }
+                }
+            }
+            if (dayCounter > daysInMonth) break
+        }
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        // Close button
+        Button(
+            onClick = onClose,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Закрыть")
+        }
+    }
 }
