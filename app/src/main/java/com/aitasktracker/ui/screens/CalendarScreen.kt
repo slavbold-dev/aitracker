@@ -236,15 +236,17 @@ fun TaskItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (task.isAllDay) {
-                        Badge {
-                            Text("Весь день")
-                        }
+                        AssistChip(
+                            onClick = { },
+                            label = { Text("Весь день") }
+                        )
                     } else {
                         task.time?.let { time ->
                             val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                            Badge {
-                                Text(timeFormat.format(Date(time)))
-                            }
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(timeFormat.format(Date(time))) }
+                            )
                         }
                     }
                 }
